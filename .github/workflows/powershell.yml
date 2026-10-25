@@ -1,0 +1,54 @@
+# Copyright (c) 2026 Iyad Engle
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: PowerShell checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Parse PowerShell script
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            "$PWD/NetDiag.ps1",
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+
+          if ($errors.Count -gt 0) {
+            $errors | Format-List *
+            exit 1
+          }
+
+          Write-Host "PowerShell syntax check passed."
+
+  pester:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run Pester tests
+        shell: pwsh
+        run: |
+          if (-not (Get-Module -ListAvailable Pester | Where-Object { $_.Version -ge [version]"5.0" })) {
+            Install-Module Pester -MinimumVersion 5.0 -Force -Scope CurrentUser -SkipPublisherCheck
+          }
+          Import-Module Pester -MinimumVersion 5.0
+          $config = New-PesterConfiguration
+          $config.Run.Path = "tests/powershell"
+          $config.Run.Exit = $true
+          $config.Output.Verbosity = "Detailed"
+          Invoke-Pester -Configuration $config
